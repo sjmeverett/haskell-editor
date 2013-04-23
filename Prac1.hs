@@ -266,6 +266,11 @@ handleKey (CtrlU) (sz, (cz, c@(Here ins clip), cs), ss)
 
 handleKey _ _ = Nothing
 
+
+--Quit
+handleQuit :: TextCursor -> Bool
+handleQuit tc = True
+
 --SOME FUNCTIONS
 makeForward :: Bwd x -> [x] -> [x]
 makeForward B0 bs = bs

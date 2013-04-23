@@ -115,7 +115,9 @@ outer ps tc = inner ps tc (whatAndWhere tc) LotsChanged
     mc <- keyReady
     case mc of
       Nothing -> inner ps' tc lc NoChange
-      Just Quit -> return ()
+      Just Quit -> case handleQuit tc of
+        True -> return ()
+        False -> inner ps' tc lc NoChange
       Just k -> case handleKey k tc of
         Nothing -> inner ps' tc lc NoChange
         Just (d, tc') -> inner ps' tc' (whatAndWhere tc') d
