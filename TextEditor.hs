@@ -32,9 +32,7 @@ focus tb = do
             
             cursorToPoint cursor
             focus tb'
-    
-    where
-        cursorToPoint (x, y) = setCursor (y + 1) (x + 1)
+            
 
 main = do
     hSetBuffering stdout NoBuffering
