@@ -2,7 +2,7 @@
   to allow keyboard input with ANSI escape sequences to be parsed for easy
   pattern matching.-}
 
-module Keys (getKey, ArrowDir, Modifier, Key) where
+module Keys (getKey, ArrowDir(..), Modifier(..), Key(..)) where
 
 import System.IO(hReady,stdin)
 import Data.Char(chr)
@@ -19,7 +19,7 @@ data Key
   | Return
   | Backspace
   | Delete
-  | Quit
+  | Escape
   | Home
   | End
   | Insert
@@ -45,7 +45,7 @@ getKey = do
     
     if c == '\ESC' && not b then
         --escape on its own
-        return (Just Quit)
+        return (Just Escape)
     else if c > ' ' && c < '\DEL' then
         --normal typed key
         return (Just (CharKey c))
