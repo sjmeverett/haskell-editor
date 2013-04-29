@@ -7,25 +7,34 @@ import System.IO
 import System.Environment
 
 
-focus :: TextBox -> IO ()
+focus :: TextBox -> IO TextBox
 focus tb = do
+    refresh
     key <- getKey
     
     case key of
         Nothing -> focus tb
-        Just Escape -> return ()
+        Just Escape -> return tb
         Just k -> do
             size <- screenSize
-            let ((view, cursor, damage), tb') = runAction (handleKeyAction k size) tb
+            let ((view, cursor@(x,y), damage), tb') = runAction (handleKeyAction k size) tb
             
             case damage of
-                _ -> do
-                    clearScreen
+                LotsChanged -> do
                     resetCursor
                     mapM_ putStr view
+                
+                LineChanged -> do
+                    cursorToPoint (0, y)
+                    putStr (view !! y)
+
+                _ -> return ()
             
+            cursorToPoint cursor
             focus tb'
     
+    where
+        cursorToPoint (x, y) = setCursor (y + 1) (x + 1)
 
 main = do
     hSetBuffering stdout NoBuffering
@@ -37,5 +46,6 @@ main = do
     initscr
     size <- screenSize
     let tb = makeTextBox (lines file) size
+    clearScreen
     focus tb
     endwin
