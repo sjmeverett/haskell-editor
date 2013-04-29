@@ -1,6 +1,5 @@
 module ANSIEscapes 
   (setCursor,
-   cursorToPoint,
    upLine,
    downLine,
    up,
@@ -55,9 +54,6 @@ moveCursor dir n  = putStr $ "\ESC[" ++ show n ++ show dir
 
 setCursor :: Int -> Int -> IO ()
 setCursor row col = escape (show row ++ ";" ++ show col ++ "H")
-
-cursorToPoint :: (Int, Int) -> IO ()
-cursorToPoint (x, y) = setCursor (y + 1) (x + 1)
 
 killLine          = escape "K" 
 restoreCursor     = escape "u"

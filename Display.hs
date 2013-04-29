@@ -3,6 +3,7 @@ module Display where
 
 import Foreign
 import Foreign.C (CInt(..))
+import ANSIEscapes
 
 foreign import ccall
   initscr :: IO () 
@@ -27,3 +28,7 @@ screenSize = do
     lnes <- peek linesPtr
     cols <- peek colsPtr
     return (fromIntegral cols, fromIntegral lnes)
+    
+
+cursorToPoint :: (Int, Int) -> IO ()
+cursorToPoint (x, y) = setCursor (y + 1) (x + 1)

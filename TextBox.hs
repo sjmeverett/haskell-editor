@@ -3,6 +3,7 @@ module TextBox where
 
 import Keys
 import Display
+import Control.Monad
 
 {-Backwards list-}
 data Bwd x = B0 | Bwd x :< x deriving (Show, Eq)
@@ -24,9 +25,13 @@ type TextCursor = Cursor String StringCursor
 
 {-A data type to represent a TextBox that can be displayed on the screen and typed in-}
 data TextBox = TextBox { 
-    cursor :: TextCursor,   --the contents of the box, and the position of the cursor
-    overwrite :: Bool,      --whether or to overwrite text at the current cursor position
-    layout :: (Point, Size) --the position in the text of the top left character in the box, and the size of the box
+    --the contents of the box, and the position of the cursor
+    cursor :: TextCursor,
+    --whether or to overwrite text at the current cursor position
+    overwrite :: Bool,
+    --the position of the box on screen, the position in the text of the top
+    --left character in the box, and the size of the box
+    layout :: (Point, Point, Size) 
 }
 
 
@@ -50,24 +55,28 @@ instance Monad TextBoxAction where
 
 
 {-Makes a TextBox from lines of text-}
-makeTextBox :: [String] -> Size -> TextBox
-makeTextBox lines size = TextBox { cursor = (makeCursor lines), overwrite = False, layout = ((0,0), size) }
+makeTextBox :: [String] -> TextBox
+makeTextBox lines = TextBox { cursor = (makeCursor lines), overwrite = False, layout = ((0,0), (0,0), (0,0)) }
 
 
-{-Handles the given key for the textbox and returns the new viewport, cursor position, and damage report-}
-handleKeyAction :: Key -> Size -> TextBoxAction ([String], Point, Damage)
-handleKeyAction key size = do
-    resized <- resize size
-    damage <- handleKey key
-    (lines, cursor, scrolled) <- getTextView
-    let damage' = if scrolled || resized then LotsChanged else damage
-    return (lines, cursor, damage')
+{-Handles the given key for the given TextBox and updates the screen correspondingly-}
+updateTextBox :: Key -> TextBox -> IO TextBox
+updateTextBox key tb = do
+    let (damage, tb') = runAction (inner key) tb
+    paint damage tb'
+    return tb'
+    
+    where 
+        inner key = do
+            damage <- handleKey key
+            scrolled <- scrollToCursor
+            return $ if scrolled then LotsChanged else damage
 
 
-{-Resizes the TextBox to the given size, returning true if the size was actually changed-}
-resize :: Size -> TextBoxAction Bool
-resize size' = TextBoxAction $ \(TextBox { cursor = cur, overwrite = ovw, layout = (scroll, size) })
-    -> (size' /= size, TextBox { cursor = cur, overwrite = ovw, layout = (scroll, size') })
+{-Reloacates the TextBox to the given location and size, returning true if anything was actually changed-}
+relocate :: Point -> Size -> TextBoxAction Bool
+relocate pos' size' = TextBoxAction $ \(TextBox { cursor = cur, overwrite = ovw, layout = (pos, scroll, size) })
+    -> (pos' /= pos || size' /= size, TextBox { cursor = cur, overwrite = ovw, layout = (pos', scroll, size') })
 
 
 {-Makes a TextCursor from lines of text-}
@@ -76,14 +85,12 @@ makeCursor [] = (B0, (B0, Here, []), [])
 makeCursor (l:ls) = (B0, (B0, Here, l), ls)
 
 
-{-Ensures that the viewport contains the cursor and then crops that viewport from the text-}
-getTextView :: TextBoxAction ([String], Point, Bool)
-getTextView = TextBoxAction $ wrapped where
-    wrapped (TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = ((sx, sy), size@(w, h)) })
-        = ((croppedView, (x - sx', y - sy'), scrollChanged), TextBox { cursor = tc, overwrite = ovw, layout = ((sx', sy'), size) }) 
+{-Ensures that the viewport contains the cursor-}
+scrollToCursor :: TextBoxAction Bool
+scrollToCursor = TextBoxAction wrapped where
+    wrapped (TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = (pos, (sx, sy), size@(w, h)) })
+        = (scrollChanged, TextBox { cursor = tc, overwrite = ovw, layout = (pos, (sx', sy'), size) })
         where
-            croppedView = map (crop sx' w ' ') ((crop sy' h (repeat ' ')) lines)
-            crop pos size fill = take size . drop pos . (++(repeat fill))
             (_, x, line) = deactivate strcur
             (_, y, lines) = deactivate (before, Here, line : after)
             
@@ -98,6 +105,48 @@ getTextView = TextBoxAction $ wrapped where
                 | cursor < val = cursor
                 --cursor is after (below/to the right) viewport
                 | otherwise = max 0 (cursor - range)
+
+
+{-Crops the viewport from the text-}
+getTextView :: TextBoxAction ([String], Point)
+getTextView = TextBoxAction wrapped where
+    wrapped tb@(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = lay@((px, py), (sx, sy), (w, h)) })
+        = ((croppedView, (x - sx + px, y - sy + py)), tb) 
+        where
+            croppedView = map (crop sx w ' ') ((crop sy h (repeat ' ')) lines)
+            crop pos size fill = take size . drop pos . (++(repeat fill))
+            (_, x, line) = deactivate strcur
+            (_, y, lines) = deactivate (before, Here, line : after)                
+
+
+{-Paints the given textbox on screen-}
+paint :: Damage -> TextBox -> IO ()
+paint damage tb@(TextBox { cursor = _, overwrite = _, layout = (pos@(px, py), _, (tw, th)) }) = do
+    (sw, sh) <- screenSize
+    let ((view, cursor@(cx, cy)), _) = runAction getTextView tb
+    
+    case damage of
+        LotsChanged -> do
+            if (tw /= sw) then do
+                foldM_ putln pos view
+            else do
+                cursorToPoint pos
+                mapM_ putStr view
+        
+        LineChanged -> do
+            cursorToPoint (px, cy)
+            putStr (view !! (cy - py))
+            
+        _ -> return ()
+        
+    cursorToPoint cursor
+        
+    where
+        putln pos@(x,y) line = do
+            cursorToPoint pos
+            putStr line
+            return (x, y + 1)
+
 
 
 {-Handles a key being pressed in the TextBox-}
