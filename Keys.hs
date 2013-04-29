@@ -46,7 +46,7 @@ getKey = do
     if c == '\ESC' && not b then
         --escape on its own
         return (Just Escape)
-    else if c > ' ' && c < '\DEL' then
+    else if c >= ' ' && c < '\DEL' then
         --normal typed key
         return (Just (CharKey c))
     else
