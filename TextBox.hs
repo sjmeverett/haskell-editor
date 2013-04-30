@@ -232,8 +232,7 @@ handleTCKey (Backspace) (sz, (cz :< c, cur, cs), ss)
 
 --backspace at start of line
 handleTCKey (Backspace) (sz :< s, (B0, cur, cs), ss)
-    = (LotsChanged, (sz, activate (cur, length line, line), ss))
-    where line = s ++ cs
+    = (LotsChanged, (sz, (makeBackward B0 s, cur, cs), ss))
 
 --delete
 handleTCKey (Delete) (sz, (cz, cur, c : cs), ss)
