@@ -1,4 +1,6 @@
 
+module Main where
+
 import Keys
 import Display
 import TextBox
@@ -108,6 +110,25 @@ focusConsole te = do
         Nothing ->
             focusFileBox te
             
+
+focusOutput :: TextEditor -> IO TextEditor
+focusOutput te = do
+    te@(fb, co, ci, ch, pr, sz) <- dolayout te
+    paint PointChanged co
+    
+    key <- getKey
+    
+    let handle k = do
+        co' <- updateTextBox k co
+        focusOutput (fb, co', ci, ch, pr, sz)
+    
+    case key of
+        Just Escape -> return te
+        Just k@(ArrowKey _ _) -> handle k
+        Just End -> handle End
+        Just Home -> handle Home
+        _ -> focusOutput te
+            
             
 compile :: TextEditor -> IO TextEditor
 compile (fb, co, ci, ch, pr, sz)
@@ -140,6 +161,11 @@ mainLoop te = do
         Just (CharKey 'c') -> do
             curs_set 1
             te <- focusConsole te
+            mainLoop te
+            
+        Just (CharKey 'o') -> do
+            curs_set 1
+            te <- focusOutput te
             mainLoop te
             
         Just (FunctionKey 6) -> do
