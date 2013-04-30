@@ -153,7 +153,7 @@ mainLoop te = do
         Just Escape ->
             return te
        
-        Just Return -> do
+        Just (CharKey 'f') -> do
             curs_set 1
             te <- focusFileBox te
             mainLoop te
