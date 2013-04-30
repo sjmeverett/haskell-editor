@@ -20,6 +20,9 @@ foreign import ccall "&LINES"
 foreign import ccall "&COLS"
   colsPtr :: Ptr CInt
   
+foreign import ccall "curs_set"
+    curs_set :: CInt -> IO ()
+  
 type Point = (Int, Int)
 type Size = (Int, Int)
 

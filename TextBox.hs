@@ -13,7 +13,7 @@ data Bwd x = B0 | Bwd x :< x deriving (Show, Eq)
 type Cursor x m = (Bwd x, m, [x])
 
 {-A dummy placeholder for StringCursors-}
-data Here = Here
+data Here = Here deriving Show
 
 {-A cursor for a line of text: characters either side and a placeholder in the
   middle-}
@@ -32,7 +32,7 @@ data TextBox = TextBox {
     --the position of the box on screen, the position in the text of the top
     --left character in the box, and the size of the box
     layout :: (Point, Point, Size) 
-}
+} deriving Show
 
 
 data Damage
@@ -59,6 +59,32 @@ makeTextBox :: [String] -> TextBox
 makeTextBox lines = TextBox { cursor = (makeCursor lines), overwrite = False, layout = ((0,0), (0,0), (0,0)) }
 
 
+{-Makes a TextCursor from lines of text-}
+makeCursor :: [String] -> TextCursor
+makeCursor [] = (B0, (B0, Here, []), [])
+makeCursor (l:ls) = (B0, (B0, Here, l), ls)
+
+
+{-Gets the text contained in a textbox-}
+getText :: TextBox -> String
+getText tb = (unlines . getLines) tb
+
+
+{-Gets the lines contained in a textbox-}
+getLines :: TextBox -> [String]
+getLines (TextBox { cursor = (before, strcur, after), overwrite = _, layout = _ }) =
+    let (_, _, line) = deactivate strcur
+        (_, _, lines) = deactivate (before, Here, line : after)
+    
+    in lines
+    
+    
+{-Deletes all the text in a textbox-}
+clear :: TextBox -> TextBox
+clear (TextBox { cursor = _, overwrite = ovw, layout = l})
+    = TextBox { cursor = makeCursor [], overwrite = ovw, layout = l}
+
+
 {-Handles the given key for the given TextBox and updates the screen correspondingly-}
 updateTextBox :: Key -> TextBox -> IO TextBox
 updateTextBox key tb = do
@@ -79,44 +105,62 @@ relocate pos' size' = TextBoxAction $ \(TextBox { cursor = cur, overwrite = ovw,
     -> (pos' /= pos || size' /= size, TextBox { cursor = cur, overwrite = ovw, layout = (pos', scroll, size') })
 
 
-{-Makes a TextCursor from lines of text-}
-makeCursor :: [String] -> TextCursor
-makeCursor [] = (B0, (B0, Here, []), [])
-makeCursor (l:ls) = (B0, (B0, Here, l), ls)
-
-
 {-Ensures that the viewport contains the cursor-}
 scrollToCursor :: TextBoxAction Bool
-scrollToCursor = TextBoxAction wrapped where
-    wrapped (TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = (pos, (sx, sy), size@(w, h)) })
-        = (scrollChanged, TextBox { cursor = tc, overwrite = ovw, layout = (pos, (sx', sy'), size) })
-        where
-            (_, x, line) = deactivate strcur
-            (_, y, lines) = deactivate (before, Here, line : after)
+scrollToCursor = TextBoxAction $ \(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = (pos, (sx, sy), size@(w, h)) }) ->
+    let (_, x, line) = deactivate strcur
+        (_, y, lines) = deactivate (before, Here, line : after)
+        
+        sx' = intoRange sx x w
+        sy' = intoRange sy y h
+        scrollChanged = sx' /= sx || sy' /= sy
+        
+        intoRange val cursor range
+            --cursor is inside viewport
+            | cursor >= val && cursor < val + range = val
+            --cursor is before (above/to the left) viewport
+            | cursor < val = cursor
+            --cursor is after (below/to the right) viewport
+            | otherwise = max 0 (cursor - range)
+    
+    in (scrollChanged, TextBox { cursor = tc, overwrite = ovw, layout = (pos, (sx', sy'), size) })
+
+
+{-Appends the given lines to the textbox and moves the cursor to the first
+  character on the last line-}
+appendLines :: [String] -> TextBoxAction ()
+appendLines newlines = TextBoxAction $ \(TextBox { cursor = (before, strcur, after), overwrite = ovw, layout = lay }) ->
+    let (_, _, line) = deactivate strcur
+        tc' = (makeBackward before (line : after ++ init newlines), activate (Here, 0, last newlines), [])
+    
+    in ((), TextBox { cursor = tc', overwrite = ovw, layout = lay })
             
-            sx' = intoRange sx x w
-            sy' = intoRange sy y h
-            scrollChanged = sx' /= sx || sy' /= sy
+        
+
+{-Appends the given lines to the textbox, scrolls it to the last line and
+  repaints it on screen-}
+appendAndScroll :: [String] -> TextBox -> IO (TextBox)
+appendAndScroll lines tb = do
+    let action = do
+            appendLines lines
+            scrollToCursor
             
-            intoRange val cursor range
-                --cursor is inside viewport
-                | cursor >= val && cursor < val + range = val
-                --cursor is before (above/to the left) viewport
-                | cursor < val = cursor
-                --cursor is after (below/to the right) viewport
-                | otherwise = max 0 (cursor - range)
+        (_, tb') = runAction action tb
+        
+    paint LotsChanged tb'
+    return tb'
 
 
 {-Crops the viewport from the text-}
 getTextView :: TextBoxAction ([String], Point)
-getTextView = TextBoxAction wrapped where
-    wrapped tb@(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = lay@((px, py), (sx, sy), (w, h)) })
-        = ((croppedView, (x - sx + px, y - sy + py)), tb) 
-        where
-            croppedView = map (crop sx w ' ') ((crop sy h (repeat ' ')) lines)
-            crop pos size fill = take size . drop pos . (++(repeat fill))
-            (_, x, line) = deactivate strcur
-            (_, y, lines) = deactivate (before, Here, line : after)                
+getTextView = TextBoxAction $ \tb@(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = lay@((px, py), (sx, sy), (w, h)) }) ->
+    let croppedView = map (crop sx w ' ') ((crop sy h (repeat ' ')) lines)
+        crop pos size fill = take size . drop pos . (++(repeat fill))
+        (_, x, line) = deactivate strcur
+        (_, y, lines) = deactivate (before, Here, line : after)
+           
+    in ((croppedView, (x - sx + px, y - sy + py)), tb) 
+            
 
 
 {-Paints the given textbox on screen-}
@@ -152,17 +196,18 @@ paint damage tb@(TextBox { cursor = _, overwrite = _, layout = (pos@(px, py), _,
 {-Handles a key being pressed in the TextBox-}
 handleKey :: Key -> TextBoxAction Damage
 
-handleKey key = TextBoxAction $ \tb -> wrapped key tb where
-    wrapped key (TextBox { cursor = tc, overwrite = ovw, layout = l }) = case key of
+handleKey key = TextBoxAction $ \tb@(TextBox { cursor = tc, overwrite = ovw, layout = l }) ->
+    case key of
         --insert key
         Insert -> (NoChange, (TextBox { cursor = tc, overwrite = not ovw, layout = l }))
         
         --keys that only affect the text cursor
-        _ -> (damage, (TextBox { cursor = tc', overwrite = ovw, layout = l })) where
-            (damage, tc') = inner ovw key tc
-            --special case for when overwrite is true
-            inner True (CharKey c) (sz, (cz, Here, _:cs), ss) = (LineChanged, (sz, (cz :< c, Here, cs), ss))
-            inner _ key tc = handleTCKey key tc
+        _ -> (damage, (TextBox { cursor = tc', overwrite = ovw, layout = l }))
+            where
+                (damage, tc') = inner ovw key tc
+                --special case for when overwrite is true
+                inner True (CharKey c) (sz, (cz, Here, _:cs), ss) = (LineChanged, (sz, (cz :< c, Here, cs), ss))
+                inner _ key tc = handleTCKey key tc
 
 
 {-Handle a key which just affects the text cursor-}

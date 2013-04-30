@@ -5,6 +5,7 @@ import TextBox
 import ANSIEscapes
 import System.IO
 import System.Environment
+import FoulParser
 
 {-A TextEditor has a file edit box, a console output, a console input, and a size-}
 type TextEditor = (TextBox, TextBox, TextBox, Size)
@@ -32,27 +33,79 @@ dolayout te@(fb, co, ci, sz@(w, h)) = do
         return te
 
 
-run :: TextEditor -> IO ()
-run te = do
-    te'@(fb, co, ci, sz) <- dolayout te
+focusFileBox :: TextEditor -> IO TextEditor
+focusFileBox te = do
+    te@(fb, co, ci, sz) <- dolayout te
+    paint PointChanged fb
+    
     key <- getKey
     
     case key of
         Just Escape ->
-            return ()
+            return te
             
         Just k -> do
-            fb' <- updateTextBox k fb
-            run (fb', co, ci, sz)
+            fb <- updateTextBox k fb
+            focusFileBox (fb, co, ci, sz)
             
         Nothing ->
-            run te'
-            
-            
---    where
---        focusFileBox (TextEditor { fileBox = fb, consoleOutput = co, consoleInput = ci, size = sz })
---            = TextEditor { fileBox = focus fb, consoleOutput = co, consoleInput = ci, size = sz })
+            focusFileBox te
 
+
+
+focusConsole :: TextEditor -> IO TextEditor
+focusConsole te = do
+    te@(fb, co, ci, sz) <- dolayout te
+    paint PointChanged ci
+    
+    key <- getKey
+    
+    case key of
+        Just Escape ->
+            return te
+        
+        Just Return -> do
+            let [cmd] = getLines ci
+                ci' = clear ci
+                output = in2out cmd
+            
+            paint LineChanged ci'            
+            co' <- appendAndScroll (lines output) co
+            focusConsole (fb, co', ci', sz)
+        
+        Just k -> do
+            ci <- updateTextBox k ci
+            focusConsole (fb, co, ci, sz)
+        
+        Nothing ->
+            focusFileBox te
+            
+
+
+mainLoop :: TextEditor -> IO TextEditor
+mainLoop te = do
+    te <- dolayout te
+    curs_set 0
+    
+    key <- getKey
+    
+    case key of
+        Just Escape ->
+            return te
+       
+        Just Return -> do
+            curs_set 1
+            te <- focusFileBox te
+            mainLoop te
+        
+        Just (CharKey 'c') -> do
+            curs_set 1
+            te <- focusConsole te
+            mainLoop te
+            
+        _ ->
+            mainLoop te
+        
 
 main = do
     hSetBuffering stdout NoBuffering
@@ -63,8 +116,6 @@ main = do
         (x : _) -> readFile x
     initscr
     clearScreen
-    
-    let te = (makeTextBox (lines file), makeTextBox ["Interactive console. Type help for help.", ""], makeTextBox [], (0,0))
-    
-    run te
+
+    mainLoop (makeTextBox (lines file), makeTextBox [], makeTextBox [], (0,0))
     endwin
