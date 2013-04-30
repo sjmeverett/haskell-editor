@@ -207,15 +207,21 @@ parseFunc :: Parser (String, Line)
 parseFunc = message "expected function definition"
           $ pure (,) <*> variable <*> parseLine
 
+
+parseFull :: Parser x -> String -> Either String x
+parseFull p s = case (parse p) s of
+    Right (v, []) -> Right v
+    Right (_, s) -> Left ("Extra input: " ++ s)
+    Left (e, s) -> Left (e ++ " at '" ++ (take 20 s) ++ "'")
+
 {----
 (6) Wrap the whole thing in a function
 ----}
 
 in2out :: String -> String
-in2out s = case ((parse parseProg) s) of
-    Right (p, []) -> show (eval p [] (EA "main" []))
-    Right (_, s) -> show "Extra input: " ++ s
-    Left (e, s) -> e ++ " at '" ++ (take 20 s) ++ "'"
+in2out s = case parseFull parseProg s of
+    Right p -> show (eval p [] (EA "main" []))
+    Left s -> s
 
 {----
 which
