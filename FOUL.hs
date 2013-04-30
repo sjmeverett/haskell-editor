@@ -4,8 +4,10 @@
 
 module FOUL where
 
+import Data.List
+
 {-
-In this file, we'll implement a small functional programming language,
+In this file, we'll Charimplement a small functional programming language,
 the First-Order Untyped Language, FOUL. The idea is to explore how
 functional languages work, conceptually. Of course, as we'll be
 implementing FOUL in the functional language Haskell, it's more
@@ -48,7 +50,10 @@ type Line = ([Pat], Expr)
 type CName = String
 data Val
   = VC CName [Val]  -- a constructor with 0 or more subvalues
-  deriving Show
+
+instance Show Val where
+    show (VC name []) = name
+    show (VC name xs) = name ++ "(" ++ (intercalate "," (map show xs)) ++ ")"
 
 {- Let's have some examples. -}
 
