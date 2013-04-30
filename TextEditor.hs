@@ -7,12 +7,14 @@ import System.IO
 import System.Environment
 import FoulParser
 
-{-A TextEditor has a file edit box, a console output, a console input, and a size-}
-type TextEditor = (TextBox, TextBox, TextBox, Size)
+type HistoryCursor = Cursor String Here
+
+{-A TextEditor has a file edit box, a console output, a console input, a command history, and a size-}
+type TextEditor = (TextBox, TextBox, TextBox, HistoryCursor, Size)
 
 
 dolayout :: TextEditor -> IO TextEditor
-dolayout te@(fb, co, ci, sz@(w, h)) = do
+dolayout te@(fb, co, ci, ch, sz@(w, h)) = do
     refresh
     sz'@(w', h') <- screenSize
     
@@ -28,14 +30,14 @@ dolayout te@(fb, co, ci, sz@(w, h)) = do
         paint LotsChanged ci'
         cursorToPoint (0, fbheight)
         putStr (yellow (take w' (repeat '-')))
-        return (fb', co', ci', sz')
+        return (fb', co', ci', ch, sz')
     else
         return te
 
 
 focusFileBox :: TextEditor -> IO TextEditor
 focusFileBox te = do
-    te@(fb, co, ci, sz) <- dolayout te
+    te@(fb, co, ci, ch, sz) <- dolayout te
     paint PointChanged fb
     
     key <- getKey
@@ -46,16 +48,25 @@ focusFileBox te = do
             
         Just k -> do
             fb <- updateTextBox k fb
-            focusFileBox (fb, co, ci, sz)
+            focusFileBox (fb, co, ci, ch, sz)
             
         Nothing ->
             focusFileBox te
 
 
+uphistory :: HistoryCursor -> (String, HistoryCursor)
+uphistory (cz :< c, Here, cs) = (c, (cz, Here, c : cs))
+uphistory cur = ([], cur)
+
+
+downhistory :: HistoryCursor -> (String, HistoryCursor)
+downhistory (cz, Here, c : cs) = (c, (cz :< c, Here, cs))
+downhistory cur = ([], cur)
+
 
 focusConsole :: TextEditor -> IO TextEditor
 focusConsole te = do
-    te@(fb, co, ci, sz) <- dolayout te
+    te@(fb, co, ci, ch, sz) <- dolayout te
     paint PointChanged ci
     
     key <- getKey
@@ -68,14 +79,26 @@ focusConsole te = do
             let [cmd] = getLines ci
                 ci' = clear ci
                 output = in2out cmd
+                addh (cz, Here, cs) = (cz :< cmd, Here, cs)
+                ch' = addh ch
             
             paint LineChanged ci'            
             co' <- appendAndScroll (lines output) co
-            focusConsole (fb, co', ci', sz)
+            focusConsole (fb, co', ci', ch', sz)
         
+        Just (ArrowKey Normal UpArrow) -> do
+            let (cmd, ch') = uphistory ch
+            ci' <- setLines [cmd] ci
+            focusConsole (fb, co, ci', ch', sz)
+            
+        Just (ArrowKey Normal DownArrow) -> do
+            let (cmd, ch') = downhistory ch
+            ci' <- setLines [cmd] ci
+            focusConsole (fb, co, ci', ch', sz)
+                
         Just k -> do
             ci <- updateTextBox k ci
-            focusConsole (fb, co, ci, sz)
+            focusConsole (fb, co, ci, ch, sz)
         
         Nothing ->
             focusFileBox te
@@ -117,5 +140,5 @@ main = do
     initscr
     clearScreen
 
-    mainLoop (makeTextBox (lines file), makeTextBox [], makeTextBox [], (0,0))
+    mainLoop (makeTextBox (lines file), makeTextBox [], makeTextBox [], (B0, Here, []), (0,0))
     endwin

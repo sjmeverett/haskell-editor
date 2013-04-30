@@ -149,6 +149,15 @@ appendAndScroll lines tb = do
         
     paint LotsChanged tb'
     return tb'
+    
+    
+{-Sets the text in a textbox, puts the cursor to the end, and paints it on screen-}
+setLines :: [String] -> TextBox -> IO (TextBox)
+setLines lines (TextBox { cursor = (before, strcur, after), overwrite = ovw, layout = lay}) = do
+    let tb = TextBox { cursor = (makeBackward B0 (init lines), (makeBackward B0 (last lines), Here, []), []), overwrite = ovw, layout = lay }
+    paint LotsChanged tb
+    return tb
+    
 
 
 {-Crops the viewport from the text-}
