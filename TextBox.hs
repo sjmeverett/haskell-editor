@@ -121,7 +121,7 @@ scrollToCursor = TextBoxAction $ \(TextBox { cursor = tc@(before, strcur, after)
             --cursor is before (above/to the left) viewport
             | cursor < val = cursor
             --cursor is after (below/to the right) viewport
-            | otherwise = max 0 (cursor - range)
+            | otherwise = max 0 (cursor - range `div` 2)
     
     in (scrollChanged, TextBox { cursor = tc, overwrite = ovw, layout = (pos, (sx', sy'), size) })
 
