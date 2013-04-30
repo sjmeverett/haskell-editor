@@ -23,6 +23,7 @@ data Key
   | Home
   | End
   | Insert
+  | FunctionKey Int
   deriving Show
 
 
@@ -85,5 +86,14 @@ standardKeyMap =
     [("\ESC[1~", Home)] ++
     [("\ESCOF", End)] ++
     [("\ESC[4~", End)] ++
-    [("\ESC[2~", Insert)]
+    [("\ESC[2~", Insert)] ++
+    [("\ESCOQ", FunctionKey 2)] ++
+    [("\ESCOR", FunctionKey 3)] ++
+    [("\ESCOS", FunctionKey 4)] ++
+    [("\ESC[15~", FunctionKey 5)] ++
+    [("\ESC[17~", FunctionKey 6)] ++
+    [("\ESC[18~", FunctionKey 7)] ++
+    [("\ESC[19~", FunctionKey 8)] ++
+    [("\ESC[20~", FunctionKey 9)] ++
+    [("\ESC[24~", FunctionKey 12)]
 
