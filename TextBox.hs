@@ -161,14 +161,14 @@ setLines lines (TextBox { cursor = (before, strcur, after), overwrite = ovw, lay
 
 
 {-Crops the viewport from the text-}
-getTextView :: TextBoxAction ([String], Point)
-getTextView = TextBoxAction $ \tb@(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = lay@((px, py), (sx, sy), (w, h)) }) ->
+getTextView :: TextBox -> ([String], Point)
+getTextView tb@(TextBox { cursor = tc@(before, strcur, after), overwrite = ovw, layout = lay@((px, py), (sx, sy), (w, h)) }) =
     let croppedView = map (crop sx w ' ') ((crop sy h (repeat ' ')) lines)
         crop pos size fill = take size . drop pos . (++(repeat fill))
         (_, x, line) = deactivate strcur
         (_, y, lines) = deactivate (before, Here, line : after)
            
-    in ((croppedView, (x - sx + px, y - sy + py)), tb) 
+    in (croppedView, (x - sx + px, y - sy + py)) 
             
 
 
@@ -176,7 +176,7 @@ getTextView = TextBoxAction $ \tb@(TextBox { cursor = tc@(before, strcur, after)
 paint :: Damage -> TextBox -> IO ()
 paint damage tb@(TextBox { cursor = _, overwrite = _, layout = (pos@(px, py), _, (tw, th)) }) = do
     (sw, sh) <- screenSize
-    let ((view, cursor@(cx, cy)), _) = runAction getTextView tb
+    let (view, cursor@(cx, cy)) = getTextView tb
     
     case damage of
         LotsChanged -> do
