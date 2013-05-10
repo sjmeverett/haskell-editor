@@ -87,7 +87,9 @@ focusConsole te = do
                 ci' = clear ci
                 
                 output = case parseFull parseExpr cmd of
-                    Right expr -> show (eval pr [] expr)
+                    Right expr -> case eval pr [] expr of
+                        CanFail (Left e) -> e
+                        CanFail (Right val) -> show val
                     Left err -> err
                     
                 addh (cz, Here, cs) = (cz :< cmd, Here, cs)

@@ -220,7 +220,9 @@ parseFull p s = case (parse p) s of
 
 in2out :: String -> String
 in2out s = case parseFull parseProg s of
-    Right p -> show (eval p [] (EA "main" []))
+    Right p -> case eval p [] (EA "main" []) of
+        CanFail (Left e) -> e
+        CanFail (Right val) -> show val
     Left s -> s
 
 {----

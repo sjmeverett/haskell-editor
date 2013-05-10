@@ -48,12 +48,22 @@ type Line = ([Pat], Expr)
 {- Let's see what FOUL values are -}
 
 type CName = String
+
 data Val
   = VC CName [Val]  -- a constructor with 0 or more subvalues
-
+  
 instance Show Val where
     show (VC name []) = name
     show (VC name xs) = name ++ "(" ++ (intercalate "," (map show xs)) ++ ")"
+
+newtype CanFail a = CanFail { getValue :: Either String a }
+
+instance Monad CanFail where
+    return x = CanFail (Right x)
+    CanFail (Left e) >>= _ = CanFail (Left e)
+    CanFail (Right x) >>= f = f x
+    fail e = CanFail (Left e)
+    
 
 {- Let's have some examples. -}
 
@@ -174,43 +184,33 @@ Let's evaluate expressions: we'll need a program to interpret
 functions and an environment to interpret variables.
 -}
 
-eval :: Prog -> Env -> Expr -> Val
-eval fs gam (EC c es)  = VC c (map (eval fs gam) es)
-eval fs gam (EV x)     = fetch x gam
-eval fs gam (EA f es)  = runfun (fetch f fs) (map (eval fs gam) es)
-  where
-    runfun :: [Line] -> [Val] -> Val
-    runfun ((ps, e) : ls) vs = case matches ps vs of
-      Nothing    -> runfun ls vs
-      Just gam'  -> eval fs gam' e
+eval :: Prog -> Env -> Expr -> CanFail Val
+
+eval fs gam (EC c es)  = do
+    vs <- mapM (eval fs gam) es
+    return $ VC c vs
+    
+eval fs gam (EV x)     = case fetch x gam of
+    Just x -> return x
+    Nothing -> fail $ "Variable '" ++ x ++ "' is undefined."
+    
+eval fs gam (EA f es)  = case fetch f fs of
+    Just fun ->  do
+        vs <- mapM (eval fs gam) es
+        runfun fun vs
+    Nothing -> fail $ "Function '" ++ f ++ "' is undefined."
+    where
+        runfun [] _ = fail $ "Non-exhaustive patterns in function '" ++ f ++ "'."
+        runfun ((ps, e) : ls) vs = case matches ps vs of
+            Nothing    -> runfun ls vs
+            Just gam'  -> eval fs gam' e
 
 {- We need that looker-upper function. -}
 
-fetch :: String -> [(String, x)] -> x
+fetch :: String -> [(String, x)] -> Maybe x
+fetch _ [] = Nothing
 fetch x ((y, v) : gam)
-  | x == y     = v
+  | x == y     = Just v
   | otherwise  = fetch x gam
 
 
-{-******************************************************************-}
-{- FOUL Example                                                     -}
-{-******************************************************************-}
-
-{- I've written a program for you, to show how it's done. -}
-
-plusProg :: Prog
-plusProg =
-  [  ("plus",
-       [  ([PC "Zero" [],       PV "y"], EV "y")
-       ,  ([PC "Suc" [PV "x"],  PV "y"], EC "Suc" [EA "plus" [EV "x", EV "y"]])
-       ])
-  ]
-
-{- And here's a test example. -}
-
-testPlus :: Val
-testPlus =
-  eval plusProg []
-    (EA "plus"  [  EC "Suc" [EC "Suc" [EC "Zero" []]]
-                ,  EC "Suc" [EC "Suc" [EC "Zero" []]]
-                ])
